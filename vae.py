@@ -35,20 +35,12 @@ batch_size = 32
 train_set = datasets.MNIST(root='./data', train=True, download=True, transform=torchvision.transforms.Compose([
                                torchvision.transforms.ToTensor()
                              ]))
-test_set = datasets.MNIST(root='./data', train=False, download=True, transform=torchvision.transforms.Compose([
-                               torchvision.transforms.ToTensor()
-                             ]))
 
 train_loader = torch.utils.data.DataLoader(
                  dataset=train_set,
                  batch_size=batch_size,
                  shuffle=True,
                  pin_memory=False)
-test_loader = torch.utils.data.DataLoader(
-                dataset=test_set,
-                batch_size=batch_size,
-                shuffle=False,
-                pin_memory=False)
 
 vae = VAE(28*28, 200) 
 
