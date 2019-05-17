@@ -11,11 +11,11 @@ import scipy.misc as smp
 class VAE(nn.Module):
   def __init__(self, input_size, hidden_dim):
     super(VAE, self).__init__()
-    self.l1 = nn.Sequential(nn.Conv2d(3, 10, 8), nn.Conv2d(10, 5, 4), nn.Conv2d(5, 3, 3), nn.MaxPool2d(4), nn.MaxPool2d(3))
-    self.encoder_u = nn.Sequential(torch.nn.Linear(3 * 17 * 13, hidden_dim), nn.ReLU())
-    self.encoder_v = nn.Sequential(torch.nn.Linear(3 * 17 * 13, hidden_dim), nn.ReLU())
-    self.l2 = torch.nn.Linear(hidden_dim, 3 * 17 * 13)
-    self.upsample = nn.Sequential(nn.ConvTranspose2d(3, 3, 2, 2), nn.ConvTranspose2d(3, 3, 5, 5))
+    self.l1 = nn.Sequential(nn.Conv2d(3, 12, 4), nn.Conv2d(12, 6, 4), nn.Conv2d(6, 3, 3), nn.MaxPool2d(2))
+    self.encoder_u = nn.Sequential(torch.nn.Linear(3 * 105 * 85, hidden_dim), nn.ReLU())
+    self.encoder_v = nn.Sequential(torch.nn.Linear(3 * 105 * 85, hidden_dim), nn.ReLU())
+    self.l2 = torch.nn.Linear(hidden_dim, 3 * 105 * 85)
+    self.upsample = nn.Sequential(nn.ConvTranspose2d(3, 3, 2, 2))
 
   def loss(self, reconstructed, x, mu, sigma):
     k = 0
@@ -27,15 +27,16 @@ class VAE(nn.Module):
 
   def forward(self, x):
     input_size = (3, 218, 178)
-    dconv = self.l1(x).view(32, 3 * 17 * 13)
+    dconv = self.l1(x).view(-1, 3 * 105 * 85)
 
     mu = self.encoder_u(dconv)
     sigma = torch.exp(.5 * self.encoder_v(dconv))
     learned_latent_space = mu + sigma * torch.randn_like(sigma)
-    l2 = self.l2(learned_latent_space).view(32, 3, 17, 13)
-    upsample = torch.nn.functional.interpolate(input=self.upsample(l2), size=(218, 178),  mode='bilinear')
-    reconstructed = nn.Sigmoid()(torch.squeeze(upsample))
-    return reconstructed, mu, sigma 
+    l2 = self.l2(learned_latent_space).view(-1, 3, 105, 85)
+    upsample = self.upsample(l2)
+    interpolated = torch.nn.functional.interpolate(input=upsample, size=(218, 178),  mode='nearest')
+    reconstructed = nn.Sigmoid()(torch.squeeze(interpolated))
+    return reconstructed, mu, sigma, learned_latent_space 
 
 batch_size = 32
 
@@ -49,7 +50,7 @@ train_loader = torch.utils.data.DataLoader(
 
 vae = VAE(3 * 218 * 178, 500) 
 
-optimizer = torch.optim.Adam(vae.parameters(), lr=3e-4)
+optimizer = torch.optim.Adam(vae.parameters(), lr=1e-3)
 epochs = 10
 num_batches = len(train_loader)
 
@@ -57,7 +58,7 @@ for epoch in range(epochs):
   for batch_index, sample in enumerate(train_loader):
     loss = 0
     x = sample[0]
-    reconstructed, mu, sigma = vae(x)
+    reconstructed, mu, sigma, learned_latent_space = vae(x)
 
     loss += vae.loss(reconstructed, x, mu, sigma)
 
@@ -66,10 +67,24 @@ for epoch in range(epochs):
 
     if batch_index % 50 == 0:
       img_x = smp.toimage(x[0].view(3, 218, 178))
-      img_r =  smp.toimage(reconstructed[0].detach().view(3, 218, 178))
+      img_r = smp.toimage(reconstructed[0].detach().view(3, 218, 178))
 
-      smp.imsave('images/' + str(batch_index) + 'original.jpg', img_x)    
-      smp.imsave('images/' + str(batch_index) + 'reconstructed.jpg', img_r)    
+      smp.imsave('images/' + str(batch_index) + '_1original.jpg', img_x)    
+      smp.imsave('images/' + str(batch_index) + '_1reconstructed.jpg', img_r)
+
+      img_x = smp.toimage(learned_latent_space[0].detach().view(20,25))
+      smp.imsave('images/' + str(batch_index) + '_1latent.jpg', img_x)
+
+      img_x = smp.toimage(x[1].view(3, 218, 178))
+      img_r = smp.toimage(reconstructed[1].detach().view(3, 218, 178))
+
+      smp.imsave('images/' + str(batch_index) + '_2original.jpg', img_x)    
+      smp.imsave('images/' + str(batch_index) + '_2reconstructed.jpg', img_r)    
+
+      img_x = smp.toimage(learned_latent_space[0].detach().view(20,25))
+      smp.imsave('images/' + str(batch_index) + '_2latent.jpg', img_x)
+
+
 
 
     loss.backward()
